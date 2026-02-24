@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Azoth Entertainment</title>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+const firebaseConfig = {
+  apiKey: "COLE_AQUI",
+  authDomain: "COLE_AQUI",
+  projectId: "COLE_AQUI",
+  storageBucket: "COLE_AQUI",
+  messagingSenderId: "COLE_AQUI",
+  appId: "COLE_AQUI"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth();
+const db = getFirestore();
+const storage = getStorage();
+
+let currentProfile = "";
+
+window.selectProfile = function(type){
+  currentProfile = type;
+  document.getElementById("profile").style.display="none";
+  loadCatalog();
+}
+
+window.adminLogin = function(){
+  const email = document.getElementById("adminEmail").value;
+  const pass = document.getElementById("adminPass").value;
+  signInWithEmailAndPassword(auth,email,pass)
+  .then(()=>{
+    document.getElementById("adminPanel").style.display="block";
+  })
+  .catch(()=>alert("Erro no login"));
+}
+
+window.logoutAdmin = function(){
+  signOut(auth);
+  document.getElementById("adminPanel").style.display="none";
+}
+
+window.uploadContent = async function(){
+
+  const title = document.getElementById("title").value;
+  const type = document.getElementById("type").value;
+  const profileType = document.getElementById("profileType").value;
+  const imageFile = document.getElementById("image").files[0];
+  const videos = document.getElementById("videos").files;
+
+  if(!title || !imageFile || videos.length === 0){
+    alert("Preencha tudo");
+    return;
+  }
+
+  // Upload imagem
+  const imgRef = ref(storage, "images/" + Date.now() + imageFile.name);
+  await uploadBytes(imgRef, imageFile);
+  const imageURL = await getDownloadURL(imgRef);
+
+  let videoURLs = [];
+
+  for(let i=0;i<videos.length;i++){
+    const vidRef = ref(storage, "videos/" + Date.now() + videos[i].name);
+    await uploadBytes(vidRef, videos[i]);
+    const url = await getDownloadURL(vidRef);
+    videoURLs.push(url);
+  }
+
+  await addDoc(collection(db,"catalog"),{
+    title,
+    type,
+    profileType,
+    image: imageURL,
+    videos: videoURLs,
+    created: Date.now()
+  });
+
+  alert("Conteúdo publicado!");
+}
+
+function loadCatalog(){
+  onSnapshot(collection(db,"catalog"), snapshot=>{
+    const container = document.getElementById("catalog");
+    container.innerHTML="";
+
+    snapshot.forEach(docSnap=>{
+      const item = docSnap.data();
+      const id = docSnap.id;
+
+      if(item.profileType === currentProfile){
+
+        const div = document.createElement("div");
+        div.className="card";
+
+        div.innerHTML = `
+          <img src="${item.image}">
+          <h4>${item.title}</h4>
+          <button onclick="playVideos(${JSON.stringify(item.videos)})">Assistir</button>
+          <button onclick="deleteContent('${id}')">Excluir</button>
+        `;
+
+        container.appendChild(div);
+      }
+    });
+  });
+}
+
+window.deleteContent = async function(id){
+  await deleteDoc(doc(db,"catalog",id));
+}
+
+window.playVideos = function(videos){
+  const modal = document.getElementById("player");
+  modal.style.display="block";
+  const container = document.getElementById("videoContainer");
+  container.innerHTML="";
+
+  videos.forEach(v=>{
+    container.innerHTML += `
+      <video controls width="100%" src="${v}"></video><br>
+    `;
+  });
+}
+
+window.closePlayer = function(){
+  document.getElementById("player").style.display="none";
+}
+
+</script>
+
+<style>
+body{margin:0;background:#111;color:white;font-family:Arial}
+header{background:black;color:red;padding:15px;text-align:center;font-size:22px}
+button{background:red;color:white;border:none;padding:8px;margin:5px;cursor:pointer}
+.card{display:inline-block;width:170px;margin:10px;background:#222;padding:5px;border-radius:5px}
+.card img{width:100%;height:230px;object-fit:cover}
+#adminPanel{display:none;background:#000;padding:15px}
+#player{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:black;overflow:auto}
+</style>
+</head>
+
+<body>
+
+<header>Azoth Entertainment</header>
+
+<div id="profile">
+  <h2>Escolha Perfil</h2>
+  <button onclick="selectProfile('normal')">Normal</button>
+  <button onclick="selectProfile('kids')">Infantil</button>
+</div>
+
+<div id="catalog"></div>
+
+<hr>
+
+<h3>Admin</h3>
+<input type="email" id="adminEmail" placeholder="Email Admin">
+<input type="password" id="adminPass" placeholder="Senha">
+<button onclick="adminLogin()">Login</button>
+
+<div id="adminPanel">
+  <h2>Painel Criador</h2>
+
+  <input type="text" id="title" placeholder="Título"><br>
+
+  <select id="type">
+    <option value="movie">Filme</option>
+    <option value="series">Série</option>
+  </select>
+
+  <select id="profileType">
+    <option value="normal">Normal</option>
+    <option value="kids">Infantil</option>
+  </select><br>
+
+  <input type="file" id="image" accept="image/*"><br>
+  <input type="file" id="videos" accept="video/*" multiple><br>
+
+  <button onclick="uploadContent()">Publicar</button>
+  <button onclick="logoutAdmin()">Sair</button>
+</div>
+
+<div id="player">
+  <button onclick="closePlayer()">Fechar</button>
+  <div id="videoContainer"></div>
+</div>
+
+</body>
+</html>
